@@ -1,6 +1,16 @@
 # Changelog
 
 <details>
+<summary><strong>October 12th, 2026: Safer Compaction (v2.60.1)</strong></summary>
+
+### Fixed
+
+- Compaction clusters require every pair to clear the similarity threshold and are capped by `COMPACTION_MAX_CLUSTER_SIZE` (default `8`). Discarded pairs remain rejected across rescans, replacements, and deletions; pending candidates can be discarded directly. Atomic staging and conditional review transitions prevent concurrent requests from overwriting rejection, supersession, or completed application ([#296](https://github.com/Lyellr88/marm-memory/pull/296)).
+- Compaction also requires Unicode-aware word containment (default `0.9`) and rejects differing numeric values or known polarity markers. Empty token evidence fails closed. Extractive fallback deduplicates only literal containing copies with fact-preservation checks, retains the fuller copy, and uses timestamps to break equal relevance scores without treating newer statements as replacements for contradictory history. `COMPACTION_MIN_CONTAINMENT=0` restores similarity-only clustering, not weaker fallback deduplication. These checks remain conservative heuristics, and fallback summaries remain bounded ([#297](https://github.com/Lyellr88/marm-memory/pull/297)).
+
+</details>
+
+<details>
 <summary><strong>October 11th, 2026: Concept Graph Rebuild Guidance (v2.60.0)</strong></summary>
 
 ### Added

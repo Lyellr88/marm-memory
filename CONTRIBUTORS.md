@@ -26,6 +26,8 @@ Thank you to everyone helping push local-first, persistent AI memory forward.
   - [#185](https://github.com/Lyellr88/marm-memory/pull/185): Fixed Docker healthcheck validation so unhealthy service responses fail the container check, and added coverage for healthy, unhealthy, unavailable, and container-level cases.
   - [#192](https://github.com/Lyellr88/marm-memory/pull/192): Added Docker coverage proving exposed mode enforces authentication and that MARM's managed Docker path generates and persists a key when none is configured.
 - **DoubleGate** ([@doublegate](https://github.com/doublegate))
+  - [#296](https://github.com/Lyellr88/marm-memory/pull/296): Added bounded complete-linkage compaction clusters, persistent rejection handling, atomic staging, and concurrency-safe review transitions with SQLite regression coverage.
+  - [#297](https://github.com/Lyellr88/marm-memory/pull/297): Added Unicode-aware containment, numeric and known-polarity checks, and conservative literal-copy fallback deduplication with timestamp tie-breaking and multilingual regression coverage.
   - [#300](https://github.com/Lyellr88/marm-memory/pull/300): Added legacy concept-name detection and a confirmed global rebuild workflow in the Concept Graph Manager without modifying source memories.
   - [#299](https://github.com/Lyellr88/marm-memory/pull/299): Kept first-start API-key setup notices off STDIO standard output, with regression coverage for key creation and output routing.
   - [#263](https://github.com/Lyellr88/marm-memory/pull/263): Added credential redaction before storage, proposal staging, and local-model prompts, including nested metadata keys and values, identifier refusals, caller-visible redaction summaries, and regression coverage.
