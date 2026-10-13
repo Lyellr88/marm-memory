@@ -530,7 +530,7 @@ def claim_pending_compaction_prompt(
     Uses a BEGIN IMMEDIATE transaction plus rowcount checks instead of SQLite
     RETURNING so older bundled sqlite3 versions remain compatible.
     """
-    if not settings.COMPACTION_ENABLED:
+    if not settings.COMPACTION_ENABLED or not session_name or not session_name.strip():
         return None
 
     now_dt = datetime.now(timezone.utc)
@@ -560,14 +560,8 @@ def claim_pending_compaction_prompt(
                 """,
                 (now, max_nudges),
             )
-            _session_filter = " AND session_name = ?" if session_name else ""
-            _row_params = (
-                (now, max_nudges, cutoff)
-                if not session_name
-                else (now, max_nudges, cutoff, session_name)
-            )
             row = conn.execute(
-                f"""
+                """
                 SELECT id, session_name, source_memory_ids, preview, created_at,
                        expires_at, nudge_count
                 FROM compaction_staging
@@ -575,11 +569,11 @@ def claim_pending_compaction_prompt(
                   AND expires_at > ?
                   AND nudge_count < ?
                   AND (last_nudged_at IS NULL OR last_nudged_at < ?)
-                  {_session_filter}
+                  AND session_name = ?
                 ORDER BY created_at ASC
                 LIMIT 1
                 """,
-                _row_params,
+                (now, max_nudges, cutoff, session_name),
             ).fetchone()
             if not row:
                 conn.execute("COMMIT")
