@@ -1,6 +1,13 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class RedactionSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    count: int
+    kinds: dict[str, int]
 
 
 class SessionRequest(BaseModel):

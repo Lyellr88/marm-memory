@@ -1,12 +1,97 @@
-from fastapi import APIRouter
+from typing import Literal, Optional
 
-from ..core.models import NotebookRequest
+from fastapi import APIRouter
+from pydantic import BaseModel, ConfigDict
+
+from ..core.models import NotebookRequest, RedactionSummary
 from ..services.notebook import notebook_dispatch
+
+
+class _ResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class NotebookAddedResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    name: str
+    redacted: Optional[RedactionSummary] = None
+
+
+class NotebookActiveEntry(_ResponseModel):
+    name: str
+    data: str
+
+
+class NotebookUsedResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    activated_entries: list[str]
+    entries: list[NotebookActiveEntry]
+
+
+class NotebookEntryPreview(_ResponseModel):
+    name: str
+    preview: str
+    created_at: Optional[str]
+    updated_at: Optional[str]
+
+
+class NotebookShownResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    entries: list[NotebookEntryPreview]
+    total_count: int
+
+
+class NotebookStatusResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    active_entries: list[str]
+    entries: list[NotebookActiveEntry]
+    active_count: int
+
+
+class NotebookClearedResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    active_count: int
+
+
+class NotebookSavedResponse(_ResponseModel):
+    status: Literal["success"]
+    message: str
+    doc_id: int
+    memory_id: Optional[str]
+    mirror_status: Literal["synced", "pending"]
+    redacted: Optional[RedactionSummary] = None
+
+
+class NotebookErrorResponse(_ResponseModel):
+    status: Literal["error"]
+    message: str
+
+
+NotebookResponse = (
+    NotebookAddedResponse
+    | NotebookUsedResponse
+    | NotebookShownResponse
+    | NotebookStatusResponse
+    | NotebookClearedResponse
+    | NotebookSavedResponse
+    | NotebookErrorResponse
+)
+
 
 router = APIRouter(prefix="", tags=["Notebook"])
 
 
-@router.post("/marm_notebook", operation_id="marm_notebook")
+@router.post(
+    "/marm_notebook",
+    operation_id="marm_notebook",
+    response_model=NotebookResponse,
+    response_model_exclude_unset=True,
+)
 async def marm_notebook(request: NotebookRequest) -> dict:
     """
     📔 Unified notebook — add, use, show, status, clear, or save
