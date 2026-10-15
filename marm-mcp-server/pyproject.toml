@@ -83,7 +83,7 @@ dev = [
     "requests>=2.31.0",
     "mypy==2.4.0",
     "types-psutil==7.2.2.20260906",
-    "ruff==0.16.10",
+    "ruff==0.17.0",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 
