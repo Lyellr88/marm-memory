@@ -6,7 +6,6 @@ import {
   useDockerCompose,
   useDockerControl,
   useDockerJob,
-  useDockerLogs,
   useUpdateDockerConfig,
   useWriteDockerCompose,
 } from '@/hooks/use-marm-queries';
@@ -18,6 +17,7 @@ import type { DockerConfig, DockerContainer } from '@/lib/marm-types';
 import { AgentsGrid } from './AgentsGrid';
 import { ErrorState, NativeSelect, Pill, Toggle, mutationMessage } from './controls';
 import { PROFILES } from './SetupTab';
+import { LogViewer } from './LogViewer';
 
 type JobKind = 'pull' | 'start' | 'recreate';
 
@@ -107,7 +107,6 @@ export function DockerTab({ onRequestConnection }: { onRequestConnection: () => 
   const [stopOpen, setStopOpen] = useState(false);
   const [recreateOpen, setRecreateOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
-  const logs = useDockerLogs(logsOpen, 200);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [conflict, setConflict] = useState<{ path: string | null } | null>(null);
   const [written, setWritten] = useState<{ path: string; command: string } | null>(null);
@@ -245,14 +244,7 @@ export function DockerTab({ onRequestConnection }: { onRequestConnection: () => 
               <JobLine job={job} status={jobQuery.data} />
               {actionError && <ErrorState message={actionError} />}
 
-              {logsOpen && (
-                <div className="space-y-2">
-                  <Button size="sm" variant="outline" isLoading={logs.isFetching} onClick={() => void logs.refetch()}>Refresh logs</Button>
-                  {logs.isError
-                    ? <ErrorState message={mutationMessage(logs.error)} />
-                    : <pre aria-label="Container logs" className="max-h-72 overflow-auto rounded-lg border border-border/60 bg-background/60 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">{logs.data ? (logs.data.lines.join('\n') || 'No log lines yet.') : 'Loading...'}</pre>}
-                </div>
-              )}
+              {logsOpen && <LogViewer source="docker" />}
             </CardContent>
           </Card>
         )}

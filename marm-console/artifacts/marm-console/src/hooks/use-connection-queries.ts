@@ -78,6 +78,7 @@ export function useUpdateSetupSettings() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ['setup-settings-save', baseUrl],
     mutationFn: (values: Record<string, SetupSettingValue>) => client.updateSetupSettings(values),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.setupSettings(baseUrl) });

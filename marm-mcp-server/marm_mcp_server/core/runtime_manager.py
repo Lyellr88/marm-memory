@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import errno
+import http.client
 import json
 import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -52,6 +55,89 @@ def log_path() -> Path:
 
 def _probe_host(host: str) -> str:
     return "127.0.0.1" if host in {"0.0.0.0", "::", "[::]"} else host
+
+
+def intended_address() -> tuple[str, int]:
+    from ..config import user_settings
+
+    state = read_state()
+    if state and process_matches(state):
+        return str(state.get("host", SERVER_HOST)), _port(
+            state.get("port"), SERVER_PORT
+        )
+    saved = user_settings.load()
+    shadow = user_settings._read_shadow()
+    host = str(
+        (
+            shadow.get("SERVER_HOST")
+            if "SERVER_HOST" in shadow
+            else os.environ.get("SERVER_HOST")
+        )
+        or "127.0.0.1"
+    )
+    port = _port(
+        saved.get(
+            "server.port",
+            (
+                shadow.get("SERVER_PORT")
+                if "SERVER_PORT" in shadow
+                else os.environ.get("SERVER_PORT")
+            )
+            or "8001",
+        ),
+        8001,
+    )
+    if "server.expose_network" in saved:
+        host = "0.0.0.0" if saved["server.expose_network"] else "127.0.0.1"
+    return host, port
+
+
+def _port(value: Any, default: int) -> int:
+    try:
+        return max(1, min(65535, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def port_owner() -> str:
+    host, port = intended_address()
+    try:
+        addresses = socket.getaddrinfo(host.strip("[]"), port, type=socket.SOCK_STREAM)
+        for family, kind, protocol, _, socket_address in addresses:
+            with socket.socket(family, kind, protocol) as probe:
+                if sys.platform == "win32":
+                    probe.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+                probe.bind(socket_address)
+        return "none"
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE and getattr(exc, "winerror", None) != 10048:
+            return "unknown"
+    host = _probe_host(host)
+    deadline = time.monotonic() + 0.2
+    try:
+        with socket.create_connection((host, port), timeout=0.15):
+            pass
+    except OSError:
+        return "unknown"
+    try:
+        address = f"[{host}]" if ":" in host else host
+        with urllib.request.urlopen(
+            f"http://{address}:{port}/health",
+            timeout=max(0.001, min(0.15, deadline - time.monotonic())),
+        ) as response:
+            health = json.loads(response.read(65536))
+        return (
+            "marm"
+            if isinstance(health, dict) and health.get("service") == "MARM MCP Server"
+            else "other"
+        )
+    except urllib.error.HTTPError as exc:
+        exc.close()
+        return "other"
+    except OSError:
+        return "unknown"
+    except (ValueError, http.client.HTTPException):
+        return "other"
 
 
 def _headers() -> dict[str, str]:
@@ -276,7 +362,7 @@ def inspect_runtime() -> dict[str, Any]:
     remote = request_runtime(
         "/internal/runtime/status",
         host=str(state.get("host", SERVER_HOST)),
-        port=int(state.get("port", SERVER_PORT)),
+        port=_port(state.get("port"), SERVER_PORT),
     )
     identity_matches = bool(
         remote
@@ -341,7 +427,10 @@ def _wait_for_ready(*, runtime_id: str | None, timeout: float = 20.0) -> dict[st
 
 
 def start_background(
-    *, profile: str = "standard", rate_limit_rpm: int | None = None
+    *,
+    profile: str = "standard",
+    rate_limit_rpm: int | None = None,
+    cleanup_on_failure: bool = False,
 ) -> dict[str, Any]:
     current = inspect_runtime()
     if current["state"] == "ready":
@@ -372,6 +461,7 @@ def start_background(
     env = os.environ.copy()
     env["MARM_RUNTIME_ID"] = runtime_id
     env["MARM_RUNTIME_PROFILE"] = profile
+    env["MARM_TRANSPORT"] = "http"
     creationflags = 0
     kwargs: dict[str, Any] = {}
     if sys.platform == "win32":
@@ -391,15 +481,31 @@ def start_background(
             creationflags=creationflags,
             **kwargs,
         )
-    write_state(
-        make_state(
-            runtime_id=runtime_id,
-            profile=profile,
-            rate_limit_rpm=rate_limit_rpm,
-            pid=process.pid,
-        )
+    launched_state = make_state(
+        runtime_id=runtime_id,
+        profile=profile,
+        rate_limit_rpm=rate_limit_rpm,
+        pid=process.pid,
     )
-    return _wait_for_ready(runtime_id=runtime_id)
+    host, port = intended_address()
+    launched_state.update(host=host, port=port)
+    write_state(launched_state)
+    try:
+        return _wait_for_ready(runtime_id=runtime_id)
+    except Exception:
+        if not cleanup_on_failure:
+            raise
+        try:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+        finally:
+            clear_state(runtime_id)
+        raise
 
 
 def stop_runtime(

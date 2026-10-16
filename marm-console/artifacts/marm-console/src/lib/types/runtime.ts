@@ -148,6 +148,7 @@ export interface RuntimeSettings {
 }
 
 export interface RuntimeRestartJob {
+  kind?: 'start' | 'stop' | 'restart';
   status: 'queued' | 'running' | 'done' | 'error';
   seconds?: number;
   detail?: string;

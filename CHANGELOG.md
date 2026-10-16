@@ -1,6 +1,19 @@
 # Changelog
 
 <details>
+<summary><strong>October 12th, 2026: Console Server Controls (planned v2.61.0, unreleased)</strong></summary>
+
+### Added
+
+- Connections can start, stop, and restart the local managed server without closing the Console. Save and apply starts a stopped server when its intended port is free; unmanaged listeners remain protected. Local and Docker logs share an inline, bounded viewer with auto-refresh, manual refresh, and client-side clearing.
+
+### Changed
+
+- Console-launched starts clean up their own child process and state after readiness failure. CLI starts retain their existing timeout behavior. Background HTTP launches explicitly select HTTP transport so saved network settings are applied even when the parent environment came from STDIO.
+
+</details>
+
+<details>
 <summary><strong>October 12th, 2026: Safer Compaction (v2.60.1)</strong></summary>
 
 ### Fixed

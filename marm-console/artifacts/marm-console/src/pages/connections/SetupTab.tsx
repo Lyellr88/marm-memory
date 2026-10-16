@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { Check, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 import {
-  useRuntimeRestartJob,
   useRuntimeSettings,
   useSetupSettings,
   useStartRuntimeRestart,
+  useRuntimeControlJob,
   useUpdateLlmSettings,
   useUpdateRuntimeAutomation,
   useUpdateRuntimeProfile,
@@ -17,6 +17,7 @@ import { MarmApiError } from '@/lib/marm-api';
 import type { ConnectionsOverview, RuntimeProfile, SetupSettingItem, SetupSettingValue } from '@/lib/marm-types';
 import { AgentsGrid } from './AgentsGrid';
 import { ErrorState, NativeSelect, Pill, Toggle, mutationMessage } from './controls';
+import { RuntimeControls } from './RuntimeControls';
 
 export const PROFILES: Array<{ id: RuntimeProfile; label: string }> = [
   { id: 'standard', label: 'Standard' },
@@ -55,8 +56,7 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
   const settings = useSetupSettings();
   const updateSettings = useUpdateSetupSettings();
   const startRestart = useStartRuntimeRestart();
-  const [jobId, setJobId] = useState<string | null>(null);
-  const restartJob = useRuntimeRestartJob(jobId);
+  const sharedJob = useRuntimeControlJob();
   const runtime = useRuntimeSettings();
   const updateProfile = useUpdateRuntimeProfile();
   const updateAutomation = useUpdateRuntimeAutomation();
@@ -73,7 +73,7 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
   const items = groups.flatMap((group) => group.items);
   const dirtyItems = items.filter((item) => isDirty(item, draft));
   const allValid = dirtyItems.every((item) => isValid(item, draft[item.key]));
-  const restarting = startRestart.isPending || restartJob.data?.status === 'queued' || restartJob.data?.status === 'running';
+  const restarting = sharedJob.busy || startRestart.isPending;
   const locked = blocked !== null;
 
   function noteFailure(err: unknown) {
@@ -93,14 +93,12 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
     setConfirmOpen(false);
     setSaveError(null);
     setManualCommand(null);
-    setJobId(null);
     const values: Draft = {};
     for (const item of dirtyItems) values[item.key] = item.type === 'int' ? Number(draft[item.key]) : draft[item.key];
     updateSettings.mutate(values, {
       onSuccess: () => {
         setDraft({});
         startRestart.mutate(undefined, {
-          onSuccess: (job) => setJobId(job.job_id),
           onError: (err) => {
             noteFailure(err);
             const command = err instanceof MarmApiError && err.status === 409 ? restartCommand(err) : null;
@@ -162,6 +160,7 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-xl border border-border/80 bg-card/45 p-5">
               <h3 className="mb-1 font-medium">Runtime</h3>
+              <RuntimeControls overview={overview} disabled={locked || updateSettings.isPending} />
               <SettingRow
                 title="Profile"
                 help="How strictly requests are throttled."
@@ -208,7 +207,7 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
 
         <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-background/90 p-3 backdrop-blur">
           <p className="text-sm text-muted-foreground" role="status">
-            {dirtyItems.length === 0 ? 'No unsaved changes.' : `${dirtyItems.length} unsaved ${dirtyItems.length === 1 ? 'change' : 'changes'}. Save and apply restarts the runtime.`}
+            {dirtyItems.length === 0 ? 'No unsaved changes.' : `${dirtyItems.length} unsaved ${dirtyItems.length === 1 ? 'change' : 'changes'}. Save and apply ${overview?.runtime.can_start ? 'starts' : 'restarts'} the runtime.`}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="ghost" disabled={dirtyItems.length === 0} onClick={() => setDraft({})}>Discard</Button>
@@ -216,13 +215,8 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
           </div>
         </div>
 
-        <RestartStatus
-          restarting={restarting}
-          started={jobId !== null || startRestart.isPending}
-          job={restartJob.data}
-          saveError={saveError}
-          manualCommand={manualCommand}
-        />
+        {saveError && <ErrorState message={saveError} />}
+        {manualCommand && <div className="flex flex-wrap items-center gap-2 text-sm text-amber-200" role="status"><span>Saved. Restart with:</span><span className="select-all font-mono text-xs">{manualCommand}</span><CopyButton value={manualCommand} label="Copy restart command" /></div>}
       </section>
 
       <AgentsGrid onRequest={onRequestConnection} allowedTransports={['http', 'stdio']} />
@@ -231,14 +225,14 @@ export function SetupTab({ overview, onRequestConnection }: { overview: Connecti
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Save and apply?</DialogTitle>
-            <DialogDescription>Saves to {settings.data?.path ?? '~/.marm/settings.json'} and restarts the MARM runtime. Connected agents reconnect on their next request. The Console stays open.</DialogDescription>
+            <DialogDescription>Saves to {settings.data?.path ?? '~/.marm/settings.json'} and {overview?.runtime.can_start ? 'starts' : 'restarts'} the MARM runtime. Connected agents reconnect on their next request. The Console stays open.</DialogDescription>
           </DialogHeader>
           <ul className="space-y-1 text-xs text-muted-foreground">
             {dirtyItems.map((item) => <li key={item.key}><span className="text-foreground">{item.label}</span>: {String(item.value)} to {String(draft[item.key])}</li>)}
           </ul>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button onClick={saveAndApply}>Save and restart</Button>
+            <Button onClick={saveAndApply}>Save and {overview?.runtime.can_start ? 'start' : 'restart'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -257,30 +251,6 @@ function SettingRow({ title, help, helpTone, control, pill }: { title: ReactNode
         {control}
         {pill}
       </div>
-    </div>
-  );
-}
-
-function RestartStatus({ restarting, started, job, saveError, manualCommand }: { restarting: boolean; started: boolean; job: { status: string; seconds?: number; detail?: string } | undefined; saveError: string | null; manualCommand: string | null }) {
-  if (manualCommand) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/[0.05] p-3 text-sm text-amber-200" role="status">
-        <span>Saved. Restart with:</span>
-        <span className="select-all font-mono text-xs">{manualCommand}</span>
-        <CopyButton value={manualCommand} label="Copy restart command" />
-      </div>
-    );
-  }
-  if (saveError) return <ErrorState message={saveError} />;
-  if (!started) return null;
-  const failed = job?.status === 'error';
-  const done = job?.status === 'done';
-  return (
-    <div className={cn('flex items-start gap-3 rounded-lg border p-3 text-sm', failed ? 'border-destructive/35 bg-destructive/[0.06]' : done ? 'border-emerald-500/30 bg-emerald-500/[0.06]' : 'status-pulse border-primary/35 bg-primary/[0.06]')} role="status" aria-live="polite">
-      {restarting || !job ? <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" /> : failed ? <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />}
-      <p className={failed ? 'text-destructive' : done ? 'text-emerald-200' : 'text-muted-foreground'}>
-        {failed ? job?.detail || 'The restart failed.' : done ? `Runtime restarted in ${(job?.seconds ?? 0).toFixed(1)} s` : 'Restarting the runtime…'}
-      </p>
     </div>
   );
 }

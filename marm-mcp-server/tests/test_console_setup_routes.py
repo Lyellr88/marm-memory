@@ -89,20 +89,25 @@ def runtime(monkeypatch):
         "inspect": {
             "state": "ready",
             "managed": True,
+            "identity_matches": True,
             "metadata": {"port": 8123, "profile": "fast"},
         },
-        "read": {"profile": "fast", "rate_limit_rpm": 90},
+        "read": {"profile": "fast", "rate_limit_rpm": 90, "port": 8123},
         "calls": [],
     }
     monkeypatch.setattr(runtime_manager, "inspect_runtime", lambda: state["inspect"])
     monkeypatch.setattr(runtime_manager, "read_state", lambda: state["read"])
+    monkeypatch.setattr(runtime_manager, "process_matches", lambda state: True)
+    monkeypatch.setattr(runtime_manager, "port_owner", lambda: "none")
 
     def stop(**kwargs):
         state["calls"].append(("stop", kwargs))
+        state["inspect"] = {"state": "stopped", "managed": False}
         return True
 
     def start(**kwargs):
         state["calls"].append(("start", kwargs))
+        state["inspect"] = {"state": "ready", "managed": True, "identity_matches": True}
         return {"state": "ready"}
 
     monkeypatch.setattr(runtime_manager, "stop_runtime", stop)
@@ -151,6 +156,10 @@ def test_overview_reports_a_fully_set_up_machine(client, home) -> None:
         "managed": True,
         "url": "http://127.0.0.1:8123/mcp",
         "profile": "fast",
+        "port_owner": "marm",
+        "intended_port": 8123,
+        "can_start": False,
+        "controls_allowed": True,
     }
     assert body["auth"] == {"mode": "local", "key_file_exists": False}
     assert body["skills_installed"] == 1
@@ -172,7 +181,7 @@ def test_overview_on_an_empty_stopped_machine(client, runtime) -> None:
 
     assert body["runtime"]["state"] == "stopped"
     assert body["runtime"]["managed"] is False
-    assert body["runtime"]["url"] == f"http://127.0.0.1:{marm_settings.SERVER_PORT}/mcp"
+    assert body["runtime"]["url"] == "http://127.0.0.1:8123/mcp"
     detected = [
         c
         for c in client_operations.list_agents(body["runtime"]["url"], False)
@@ -394,7 +403,10 @@ def test_restart_job_stops_without_killing_the_console_then_starts(
     assert isinstance(job["seconds"], float)
     assert runtime["calls"] == [
         ("stop", {"stop_console_process": False}),
-        ("start", {"profile": "fast", "rate_limit_rpm": 90}),
+        (
+            "start",
+            {"profile": "fast", "rate_limit_rpm": 90, "cleanup_on_failure": True},
+        ),
     ]
 
 
@@ -425,7 +437,10 @@ def test_restart_job_records_the_failure(client, monkeypatch) -> None:
     assert "seconds" not in job
 
 
-def test_restart_when_not_managed_is_409_with_the_command(client, runtime) -> None:
+def test_restart_when_not_managed_is_409_with_the_command(
+    client, runtime, monkeypatch
+) -> None:
+    monkeypatch.setattr(runtime_manager, "port_owner", lambda: "marm")
     runtime["inspect"] = {"state": "stopped", "managed": False}
 
     response = client.post("/api/connections/runtime/restart")
@@ -483,6 +498,7 @@ def test_second_restart_while_one_runs_reuses_the_job(
     def slow_stop(**kwargs):
         runtime["calls"].append(("stop", kwargs))
         release.wait(5)
+        runtime["inspect"] = {"state": "stopped", "managed": False}
         return True
 
     monkeypatch.setattr(runtime_manager, "stop_runtime", slow_stop)
