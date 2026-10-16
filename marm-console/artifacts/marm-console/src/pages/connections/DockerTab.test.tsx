@@ -55,6 +55,13 @@ vi.mock('@/hooks/use-marm-queries', () => {
   };
 });
 
+vi.mock('@/hooks/use-runtime-logs', () => ({
+  useRuntimeLogTail: (enabled: boolean) => {
+    state.logsEnabled.push(enabled);
+    return { lines: (state.logs.data as { lines: string[] } | undefined)?.lines ?? [], loading: state.logs.isFetching, error: state.logs.error, exists: true, rotated: false, auto: true, setAuto: vi.fn(), refresh: state.logs.refetch, clear: vi.fn() };
+  },
+}));
+
 function config(over: Partial<DockerConfig> = {}): DockerConfig {
   return { port: 8001, tag: 'latest', data_dir: 'C:\\Users\\me\\.marm', repos: ['C:\\code\\app'], memory: null, cpus: null, expose_network: false, profile: 'standard', rate_limit_rpm: null, ...over };
 }

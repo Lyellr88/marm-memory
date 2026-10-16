@@ -7,6 +7,7 @@
 
 import type {
   AnalystProfileName,
+  RuntimeLogTail,
   BulkLogDeleteResult,
   BulkNotebookDeleteResult,
   BulkSessionDeleteResult,
@@ -506,6 +507,9 @@ export function createMarmClient(config: MarmClientConfig) {
       request<SetupSettings>(config, 'PUT', '/connections/settings', { body: { values } }),
     startRuntimeRestart: () =>
       request<{ job_id: string }>(config, 'POST', '/connections/runtime/restart', { body: {} }),
+    startRuntime: () => request<{ job_id: string }>(config, 'POST', '/connections/runtime/start', { body: {} }),
+    stopRuntime: () => request<{ job_id: string }>(config, 'POST', '/connections/runtime/stop', { body: {} }),
+    getRuntimeLogTail: (cursor?: string | null, lines = 200) => request<RuntimeLogTail>(config, 'GET', '/connections/runtime/logs', { query: { cursor: cursor ?? undefined, lines } }),
     getRuntimeRestartJob: (jobId: string) =>
       request<RuntimeRestartJob>(config, 'GET', `/connections/runtime/restart/${encodeURIComponent(jobId)}`),
 

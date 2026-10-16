@@ -193,6 +193,8 @@ marm-mcp-server/
       chunk_backfill.py        # Stopped-server backfill of memory_chunks after config change
     console/                   # Console API served on :8002 (`marm-memory console`)
       app.py                   # FastAPI app, auth, and static frontend serving
+      runtime_control.py       # Background local server lifecycle jobs
+      runtime_logs.py          # Bounded incremental runtime log reads
       endpoints/               # Console REST routes, one file per workspace
       terminal/                # Embedded terminal over WebSocket
       static/                  # Built frontend bundle shipped in the wheel

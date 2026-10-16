@@ -105,11 +105,18 @@ export interface ConnectionsChecklistItem {
 export interface ConnectionsOverview {
   version: string;
   os: string;
-  runtime: { state: string; managed: boolean; url: string; profile: string };
+  runtime: { state: string; managed: boolean; url: string; profile: string; port_owner?: 'none' | 'marm' | 'other' | 'unknown'; intended_port?: number; can_start?: boolean; controls_allowed?: boolean };
   auth: { mode: string; key_file_exists: boolean };
   agents: { connected: number; detected: number };
   skills_installed: number;
   checklist: ConnectionsChecklistItem[];
+}
+
+export interface RuntimeLogTail {
+  lines: string[];
+  cursor: string | null;
+  rotated: boolean;
+  exists: boolean;
 }
 
 export type SetupSettingValue = boolean | number | string;

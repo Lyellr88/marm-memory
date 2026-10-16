@@ -14,7 +14,8 @@ from ...config import settings as marm_settings
 from ...config import user_settings
 from ...core import runtime_flags, runtime_manager
 from ...services import client_operations, key_management, skill_install
-from .. import mcp_client, runtime_control
+from .. import mcp_client, runtime_control, runtime_logs
+from ..jobs import JobConflict
 from ..terminal.router import _loopback_only
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,9 @@ def _require_loopback(action: str) -> None:
 
 
 def _runtime_url_and_auth() -> tuple[str, bool]:
-    from ...config.settings import MARM_API_KEY, SERVER_PORT
+    from ...config.settings import MARM_API_KEY
 
-    runtime = runtime_manager.inspect_runtime()
-    metadata = runtime.get("metadata") or {}
-    port = metadata.get("port") or SERVER_PORT
+    port = runtime_manager.intended_address()[1]
     return f"http://127.0.0.1:{port}/mcp", user_settings.key_required(MARM_API_KEY)
 
 
@@ -73,6 +72,8 @@ def get_overview() -> dict:
     url, auth_required = _runtime_url_and_auth()
     runtime = runtime_manager.inspect_runtime()
     state = runtime.get("state", "stopped")
+    owner = "marm" if state == "ready" else runtime_manager.port_owner()
+    intended_port = runtime_manager.intended_address()[1]
     profile = (runtime.get("metadata") or {}).get("profile")
     agents = client_operations.list_agents(url, auth_required)
     detected = [agent for agent in agents if agent["detected"]]
@@ -87,6 +88,10 @@ def get_overview() -> dict:
             "managed": bool(runtime.get("managed")),
             "url": url,
             "profile": profile,
+            "port_owner": owner,
+            "intended_port": intended_port,
+            "can_start": state in {"stopped", "stale"} and owner == "none",
+            "controls_allowed": _loopback_only(),
         },
         "auth": {
             "mode": "key" if auth_required else "local",
@@ -188,12 +193,56 @@ def put_settings(payload: SettingsPayload) -> dict:
 @router.post("/api/connections/runtime/restart", status_code=202)
 def restart_runtime() -> Any:
     _require_loopback("Restart")
+    return _runtime_action(runtime_control.start_restart)
+
+
+def _runtime_action(action: Any) -> Any:
     try:
-        return {"job_id": runtime_control.start_restart()}
-    except runtime_control.NotManaged as exc:
-        return JSONResponse(
-            status_code=409, content={"detail": str(exc), "command": exc.command}
-        )
+        return {"job_id": action()}
+    except (
+        runtime_control.NotManaged,
+        runtime_control.PortInUse,
+        runtime_control.PortUnchecked,
+        JobConflict,
+    ) as exc:
+        body = {
+            "detail": str(exc),
+            "reason": getattr(
+                exc,
+                "reason",
+                "not_managed"
+                if isinstance(exc, runtime_control.NotManaged)
+                else "job_conflict",
+            ),
+        }
+        if isinstance(exc, runtime_control.NotManaged):
+            body["command"] = exc.command
+        return JSONResponse(status_code=409, content=body)
+
+
+@router.post("/api/connections/runtime/start", status_code=202)
+def start_runtime() -> Any:
+    _require_loopback("Start")
+    return _runtime_action(runtime_control.start_runtime)
+
+
+@router.post("/api/connections/runtime/stop", status_code=202)
+def stop_runtime() -> Any:
+    _require_loopback("Stop")
+    return _runtime_action(runtime_control.stop_runtime)
+
+
+@router.get("/api/connections/runtime/logs")
+def get_runtime_logs(cursor: str | None = None, lines: int = 200) -> dict:
+    _require_loopback("Reading runtime logs")
+    try:
+        return runtime_logs.tail(cursor, lines)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid log cursor.") from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=409, detail="Could not read runtime log."
+        ) from exc
 
 
 @router.get("/api/connections/runtime/restart/{job_id}")
