@@ -1062,7 +1062,7 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
     req.method = "POST"
     req.url.path = "/mcp"
     req.body = AsyncMock(
-        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}'
+        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{"session_name":"__default__"}}}'
     )
 
     async def run():
@@ -1151,7 +1151,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
     req.method = "POST"
     req.url.path = "/mcp"
     req.body = AsyncMock(
-        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}'
+        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{"session_name":"__default__"}}}'
     )
 
     async def run():
@@ -1644,15 +1644,13 @@ def test_http_distill_claims_against_the_resolved_session_not_globally(
     )
 
 
-def test_http_distill_is_not_claimed_when_no_session_resolves(monkeypatch, tmp_path):
+def test_http_unscoped_tool_does_not_claim_compaction_or_distill(monkeypatch, tmp_path):
     """A tool call with nothing to scope to must not claim across every one.
 
     `_compaction_session` falls through to None for a valid call that omits
     `session_name` and is not one of the few tools with a per-tool resolution
-    rule -- `marm_summary` is the maintainer's own example. Compaction accepts
-    None as "any session" (its older, looser contract, left alone here); this
-    asserts distill does not repeat that, since a None claim there means one
-    session's proposal can land in an unrelated session's response.
+    rule (e.g. `marm_summary` or `marm_code_context`). Neither compaction nor
+    distill may claim when no session is known, avoiding cross-session leak.
     """
     import json
     from unittest.mock import AsyncMock, MagicMock
@@ -1725,13 +1723,83 @@ def test_http_distill_is_not_claimed_when_no_session_resolves(monkeypatch, tmp_p
         )
     )
 
-    assert compaction_claimed == [None], (
-        "test setup broken: the response never reached the review-prompt "
-        f"branch (compaction claims: {compaction_claimed})"
+    assert compaction_claimed == [], (
+        f"compaction claimed against {compaction_claimed} with no session resolved"
     )
-    assert claimed == [], (
-        f"distill claimed against {claimed} with no session resolved -- "
-        f"a None claim here reaches every session's pending proposals"
+    assert claimed == [], f"distill claimed against {claimed} with no session resolved"
+
+
+def test_http_unscoped_tool_does_not_fall_back_to_active_log_session(
+    monkeypatch, tmp_path
+):
+    """Unscoped HTTP calls must not fall back to the server's active log session."""
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    load_isolated_server(monkeypatch, tmp_path)
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
+    memory_mod = importlib.import_module("marm_mcp_server.core.memory")
+    monkeypatch.setattr(memory_mod.memory, "active_log_session", "session-unrelated")
+
+    protocol_delivery_state._protocol_delivered_sessions = {"__default__"}
+
+    compaction_claimed = []
+    monkeypatch.setattr(
+        protocol_injection,
+        "claim_pending_compaction_prompt",
+        lambda memory, session_name: compaction_claimed.append(session_name),
+    )
+    monkeypatch.setattr(
+        protocol_injection, "claim_pending_distill_prompt", lambda *a, **k: None
+    )
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "marm_code_context", "arguments": {"query": "test"}},
+        }
+    ).encode()
+
+    def make_mock_response():
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+            }
+        ).encode()
+
+        async def _iter():
+            yield payload
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = MagicMock()
+        resp.headers.items.return_value = [("x-request-id", "1")]
+        resp.body_iterator = _iter()
+        resp.body = payload
+        return resp
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(return_value=body)
+
+    asyncio.run(
+        protocol_injection._mcp_tool_call_tracker(
+            req, AsyncMock(return_value=make_mock_response())
+        )
+    )
+
+    assert compaction_claimed == [], (
+        f"unscoped call claimed compaction against {compaction_claimed}, expected []"
     )
 
 
