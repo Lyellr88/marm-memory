@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..core.models import DeleteRequest, LogEntryRequest
+from ..core.models import DeleteRequest, LogEntryRequest, RedactionSummary
 from ..services.log_entry import (
     create_log_entry,
     delete_log_or_notebook_entry,
@@ -18,11 +18,6 @@ class _ResponseModel(BaseModel):
 class LoggingErrorResponse(_ResponseModel):
     status: Literal["error"]
     message: str
-
-
-class RedactionSummary(_ResponseModel):
-    count: int
-    kinds: dict[str, int]
 
 
 class LogEntryCreatedResponse(_ResponseModel):
