@@ -25,6 +25,13 @@
 
 </div>
 
+## IMPORTANT
+> Project Status: Brief Personal Pause
+>
+> I took a short personal break from active development to focus on matters outside the project. This project isn't abandoned, and I plan to return soon to keep building and refining it.
+>
+> Thank you for your patience, support, and continued interest. I’ll resume work soon and share updates as progress continues.
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
