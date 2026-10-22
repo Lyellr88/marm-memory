@@ -27,7 +27,7 @@
     "@tanstack/react-query": "catalog:",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.7",
+    "@testing-library/user-event": "^14.6.8",
     "@types/d3-force": "^3.0.10",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
@@ -35,14 +35,14 @@
     "@vitejs/plugin-react": "catalog:",
     "clsx": "catalog:",
     "date-fns": "^4.4.0",
-    "jsdom": "^30.1.2",
+    "jsdom": "^30.1.3",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwind-merge": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.3",
+    "vitest": "^5.0.5",
     "wouter": "catalog:"
   }
 }
