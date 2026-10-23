@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/components/ui/core';
 import type { ConnectionsOverview } from '@/lib/marm-types';
+import { RuntimeControls } from './RuntimeControls';
 
 function Chip({ dot, children }: { dot?: 'good' | 'warn'; children: ReactNode }) {
   return (
@@ -20,6 +21,7 @@ export function StatusStrip({ overview }: { overview: ConnectionsOverview | unde
   return (
     <div className="mb-5 flex flex-wrap gap-2" aria-label="Setup status">
       <Chip dot={running ? 'good' : 'warn'}>Runtime <b className="font-semibold text-foreground">{RUNTIME_LABEL[overview.runtime.state] ?? overview.runtime.state}</b> · {overview.runtime.url}</Chip>
+      {!running && <RuntimeControls overview={overview} compact />}
       <Chip dot={keyed ? 'good' : 'warn'}>Auth <b className="font-semibold text-foreground">{keyed ? 'key required' : 'local only'}</b></Chip>
       <Chip>Agents <b className="font-semibold text-foreground">{overview.agents.connected} of {overview.agents.detected} connected</b></Chip>
       <Chip>MARM skill <b className="font-semibold text-foreground">{overview.skills_installed} {overview.skills_installed === 1 ? 'agent' : 'agents'}</b></Chip>

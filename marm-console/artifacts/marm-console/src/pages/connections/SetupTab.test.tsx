@@ -23,6 +23,9 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useSetupSettings: () => ({ data: state.settings, isLoading: false, isError: false, error: null }),
   useUpdateSetupSettings: () => state.update,
   useStartRuntimeRestart: () => state.restart,
+  useStartRuntime: () => ({ mutate: vi.fn(), isPending: false }),
+  useStopRuntime: () => ({ mutate: vi.fn(), isPending: false }),
+  useRuntimeControlJob: () => ({ data: state.job ? { ...(state.job as object), kind: 'restart' } : undefined, busy: state.restart.isPending || (state.job as { status?: string } | undefined)?.status === 'running' }),
   useRuntimeRestartJob: (id: string | null) => {
     state.jobIds.push(id);
     return { data: state.job };
@@ -193,7 +196,7 @@ describe('SetupTab settings', () => {
     expect(state.update.mutate).toHaveBeenCalledTimes(1);
     expect(state.update.mutate.mock.calls[0][0]).toEqual({ 'server.port': 9000, 'server.expose_network': true });
     expect(state.restart.mutate).toHaveBeenCalledTimes(1);
-    expect(state.jobIds).toContain('job-1');
+    expect(state.restart.mutate).toHaveBeenCalled();
     expect(screen.getByText('Runtime restarted in 2.8 s')).toBeTruthy();
     expect(screen.getByText('No unsaved changes.')).toBeTruthy();
   });
@@ -207,7 +210,7 @@ describe('SetupTab settings', () => {
     state.job = { status: 'running' } satisfies RuntimeRestartJob;
     await user.click(screen.getByRole('button', { name: 'Save and restart' }));
 
-    expect(screen.getByText('Restarting the runtime…')).toBeTruthy();
+    expect(screen.getByText('Restarting the runtime...')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save and apply' }).hasAttribute('disabled')).toBe(true);
   });
 

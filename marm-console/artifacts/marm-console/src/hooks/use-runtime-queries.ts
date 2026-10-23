@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import type { AnalystProfileName, RuntimeProfile, DockerConfig } from '@/lib/marm-types';
 import { queryKeys, useMarmConfig } from './marm-query-core';
 
@@ -195,15 +195,49 @@ export function useCompactionDryRunJob(jobId: string | null) {
 }
 
 export function useStartRuntimeRestart() {
-  const { client } = useMarmConfig();
-  return useMutation({ mutationFn: client.startRuntimeRestart });
+  return useRuntimeAction('restart');
+}
+
+function useRuntimeAction(kind: 'start' | 'stop' | 'restart') {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ['runtime-action', baseUrl],
+    mutationFn: { start: client.startRuntime, stop: client.stopRuntime, restart: client.startRuntimeRestart }[kind],
+    onMutate: () => {
+      qc.setQueryData(['runtime-action-job', baseUrl], null);
+      qc.setQueryData(['runtime-action-kind', baseUrl], kind);
+    },
+    onSuccess: (job) => qc.setQueryData(['runtime-action-job', baseUrl], job.job_id),
+  });
+}
+
+export function useStartRuntime() { return useRuntimeAction('start'); }
+export function useStopRuntime() { return useRuntimeAction('stop'); }
+
+export function useRuntimeControlJob() {
+  const { baseUrl } = useMarmConfig();
+  const active = useQuery<string | null>({ queryKey: ['runtime-action-job', baseUrl], queryFn: () => null, enabled: false, initialData: null });
+  const kind = useQuery<'start' | 'stop' | 'restart' | null>({ queryKey: ['runtime-action-kind', baseUrl], queryFn: () => null, enabled: false, initialData: null });
+  const job = useRuntimeRestartJob(active.data ?? null);
+  const pending = useIsMutating({ mutationKey: ['runtime-action', baseUrl] }) > 0;
+  const saving = useIsMutating({ mutationKey: ['setup-settings-save', baseUrl] }) > 0;
+  return { ...job, kind: kind.data, jobId: active.data, saving, busy: saving || pending || (!!active.data && !job.isError && (!job.data || job.data.status === 'queued' || job.data.status === 'running')) };
 }
 
 export function useRuntimeRestartJob(jobId: string | null) {
   const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ['runtime-restart', baseUrl, jobId],
-    queryFn: () => client.getRuntimeRestartJob(jobId as string),
+    queryFn: async () => {
+      const job = await client.getRuntimeRestartJob(jobId as string);
+      if (job.status === 'done' || job.status === 'error') {
+        void qc.invalidateQueries({ queryKey: queryKeys.connectionsOverview(baseUrl) });
+        void qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
+      }
+      return job;
+    },
     enabled: Boolean(jobId),
     retry: false,
     refetchInterval: (query) => {

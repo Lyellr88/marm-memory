@@ -14,12 +14,23 @@ logger = logging.getLogger(__name__)
 JOB_TTL_SECONDS = 3600
 
 
+class JobConflict(RuntimeError):
+    pass
+
+
 class JobRegistry:
-    def __init__(self, thread_name: str, ttl_seconds: float = JOB_TTL_SECONDS) -> None:
+    def __init__(
+        self,
+        thread_name: str,
+        ttl_seconds: float = JOB_TTL_SECONDS,
+        *,
+        reject_different_kind: bool = False,
+    ) -> None:
         self.jobs: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()
         self._thread_name = thread_name
         self._ttl = ttl_seconds
+        self._reject_different_kind = reject_different_kind
 
     def _prune(self) -> None:
         cutoff = time.time() - self._ttl
@@ -52,16 +63,38 @@ class JobRegistry:
             fields["detail"] = detail
         self._update(job_id, **fields)
 
-    def start(self, kind: str, group: str, work: Callable[[], str | None]) -> str:
+    def _existing(self, kind: str, group: str) -> str | None:
+        for existing in self.jobs.values():
+            if existing["_group"] == group and existing["status"] in (
+                "queued",
+                "running",
+            ):
+                if self._reject_different_kind and existing["kind"] != kind:
+                    raise JobConflict("Another action is already running.")
+                return str(existing["job_id"])
+        return None
+
+    def start(
+        self,
+        kind: str,
+        group: str,
+        work: Callable[[], str | None],
+        *,
+        validate: Callable[[], Any] | None = None,
+    ) -> str:
         """Run work on a thread; a running job in the same group is returned instead."""
         with self._lock:
             self._prune()
-            for existing in self.jobs.values():
-                if existing["_group"] == group and existing["status"] in (
-                    "queued",
-                    "running",
-                ):
-                    return str(existing["job_id"])
+            existing_id = self._existing(kind, group)
+            if existing_id:
+                return existing_id
+        if validate:
+            validate()
+        with self._lock:
+            self._prune()
+            existing_id = self._existing(kind, group)
+            if existing_id:
+                return existing_id
             job_id = str(uuid.uuid4())
             self.jobs[job_id] = {
                 "job_id": job_id,
