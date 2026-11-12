@@ -27,7 +27,7 @@
     "@tanstack/react-query": "catalog:",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.7",
+    "@testing-library/user-event": "^14.6.8",
     "@types/d3-force": "^3.0.10",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
@@ -42,7 +42,7 @@
     "tailwind-merge": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.3",
+    "vitest": "^5.1.0",
     "wouter": "catalog:"
   }
 }
